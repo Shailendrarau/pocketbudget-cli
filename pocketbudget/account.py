@@ -53,6 +53,10 @@ class Account:
         return budget is not None and self._category_totals[category] > budget
 
     def set_budget(self, category: str, amount: int) -> None:
+        if category not in ALLOWED_CATEGORIES:
+            raise InvalidCategoryError(category)
+        if amount < 0:
+            raise ValueError("Budget amount cannot be negative.")
         self._budgets[category] = amount
 
     def category_total(self, category: str) -> int:
