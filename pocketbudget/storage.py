@@ -4,12 +4,11 @@ import json
 from pathlib import Path
 
 from pocketbudget.account import Account
+from pocketbudget.exceptions import StorageError
 
 STORAGE_PATH = Path("data/budget.json")
 
-
-class StorageError(Exception):
-    """Raised when a save file cannot be read as valid account state."""
+__all__ = ["STORAGE_PATH", "StorageError", "load", "save"]
 
 
 def save(account: Account, path: str | Path = STORAGE_PATH) -> None:

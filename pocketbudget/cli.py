@@ -13,7 +13,11 @@ from typing import NoReturn
 
 from pocketbudget import storage
 from pocketbudget.account import Account, format_amount
-from pocketbudget.exceptions import InsufficientBalanceError, InvalidCategoryError
+from pocketbudget.exceptions import (
+    BudgetLimitExceededError,
+    InsufficientBalanceError,
+    InvalidCategoryError,
+)
 
 DATA_FILE_ENV = "POCKETBUDGET_DATA_FILE"
 
@@ -25,6 +29,7 @@ def main(argv: list[str] | None = None) -> None:
         _run(args)
     except (
         ValueError,
+        BudgetLimitExceededError,
         InvalidCategoryError,
         InsufficientBalanceError,
         storage.StorageError,
