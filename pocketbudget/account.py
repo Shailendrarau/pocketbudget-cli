@@ -26,11 +26,18 @@ class Account:
     def history(self) -> list[dict[str, object]]:
         return deepcopy(self._history)
 
-    def add_income(self, amount: int) -> None:
+    @property
+    def budgets(self) -> dict[str, int]:
+        return dict(self._budgets)
+
+    def add_income(self, amount: int, category: str | None = None) -> None:
         if amount < 0:
             raise ValueError("Income amount cannot be negative.")
         self._balance += amount
-        self._history.append({"type": "income", "amount": amount})
+        entry: dict[str, object] = {"type": "income", "amount": amount}
+        if category is not None:
+            entry["category"] = category
+        self._history.append(entry)
 
     def add_expense(self, amount: int, category: str) -> bool:
         if amount < 0:

@@ -2,12 +2,12 @@ import subprocess
 import sys
 
 
-def test_entry_point_prints_startup_message_and_exits_cleanly() -> None:
+def test_entry_point_without_a_command_prints_usage_and_exits_non_zero() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "pocketbudget"],
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0
-    assert "Hello PocketBudget" in result.stdout
-    assert result.stderr == ""
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert result.stderr
