@@ -1,0 +1,5 @@
+[lint]
+select = ["E", "F", "I", "C90"]
+
+[lint.mccabe]
+max-complexity = 7
