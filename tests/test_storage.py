@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from pocketbudget.account import Account
-from pocketbudget.exceptions import InsufficientBalanceError, InvalidCategoryError
+from pocketbudget.exceptions import (
+    BudgetLimitExceededError,
+    InsufficientBalanceError,
+    InvalidCategoryError,
+)
 from pocketbudget.storage import STORAGE_PATH, StorageError, load, save
 
 
@@ -155,3 +159,201 @@ def test_loaded_data_rejects_overdraw_like_live_data(tmp_path: Path) -> None:
 
     with pytest.raises(InsufficientBalanceError):
         load(path)
+
+
+# Strict budgets survive a save/load round trip and keep enforcing the limit
+
+
+def test_strict_budget_survives_a_save_load_round_trip(tmp_path: Path) -> None:
+    account = Account()
+    account.add_income(500)
+    account.set_budget("Food", 100, strict=True)
+    path = tmp_path / "budget.json"
+    save(account, path)
+
+    loaded = load(path)
+
+    with pytest.raises(BudgetLimitExceededError):
+        loaded.add_expense(200, "Food")
+    assert loaded.balance == 500
+    assert loaded.history == [{"type": "income", "amount": 500}]
+
+
+def test_strictness_is_per_category_after_reload(tmp_path: Path) -> None:
+    account = Account()
+    account.add_income(500)
+    account.set_budget("Food", 100, strict=True)
+    account.set_budget("Transport", 100)
+    path = tmp_path / "budget.json"
+    save(account, path)
+
+    loaded = load(path)
+
+    with pytest.raises(BudgetLimitExceededError):
+        loaded.add_expense(150, "Food")
+    assert loaded.strict_budgets == ["Food"]
+    assert loaded.add_expense(150, "Transport") is True
+
+
+def test_save_writes_the_sorted_strict_categories(tmp_path: Path) -> None:
+    account = Account()
+    account.set_budget("Transport", 100, strict=True)
+    account.set_budget("Food", 200, strict=True)
+    path = tmp_path / "budget.json"
+    save(account, path)
+
+    data = json.loads(path.read_text())
+
+    assert data["strict"] == ["Food", "Transport"]
+
+
+def test_save_omits_strict_when_no_category_is_strict(tmp_path: Path) -> None:
+    # Guard, expected green before the fix: keeps today's payload byte-identical.
+    path = tmp_path / "budget.json"
+    save(_used_account(), path)
+
+    data = json.loads(path.read_text())
+
+    assert "strict" not in data
+
+
+def test_legacy_file_without_strict_key_loads_non_strict(tmp_path: Path) -> None:
+    path = tmp_path / "budget.json"
+    path.write_text(
+        json.dumps(
+            {
+                "history": [{"type": "income", "amount": 500}],
+                "budgets": {"Food": 100},
+            }
+        )
+    )
+
+    loaded = load(path)
+
+    assert loaded.strict_budgets == []
+    assert loaded.add_expense(200, "Food") is True
+
+
+def test_strict_budget_is_deduped_on_load(tmp_path: Path) -> None:
+    path = tmp_path / "budget.json"
+    path.write_text(
+        json.dumps(
+            {
+                "history": [{"type": "income", "amount": 500}],
+                "budgets": {"Food": 100},
+                "strict": ["Food", "Food"],
+            }
+        )
+    )
+
+    loaded = load(path)
+
+    with pytest.raises(BudgetLimitExceededError):
+        loaded.add_expense(200, "Food")
+    assert loaded.strict_budgets == ["Food"]
+
+
+def test_strict_budgets_property_returns_a_copy() -> None:
+    account = Account()
+    account.set_budget("Food", 100, strict=True)
+
+    snapshot = account.strict_budgets
+    snapshot.append("Transport")
+
+    assert account.strict_budgets == ["Food"]
+
+
+def test_save_creates_the_data_folder_for_strict_budgets(tmp_path: Path) -> None:
+    account = Account()
+    account.set_budget("Food", 100, strict=True)
+    path = tmp_path / "nested" / "data" / "budget.json"
+
+    save(account, path)
+
+    assert path.is_file()
+
+
+def test_insufficient_balance_takes_precedence_over_strict_budget() -> None:
+    account = Account()
+    account.add_income(50)
+    account.set_budget("Food", 100, strict=True)
+
+    with pytest.raises(InsufficientBalanceError):
+        account.add_expense(80, "Food")
+
+
+# Malformed strict entries in the save file are reported as StorageError, and
+# unknown categories still go through the same validation as live data
+
+
+@pytest.mark.parametrize(
+    "strict",
+    [{}, "Food", 7, [1], [None], [["Food"]]],
+)
+def test_load_rejects_malformed_strict_entries(tmp_path: Path, strict: object) -> None:
+    path = tmp_path / "budget.json"
+    path.write_text(
+        json.dumps(
+            {
+                "history": [],
+                "budgets": {"Food": 100},
+                "strict": strict,
+            }
+        )
+    )
+
+    with pytest.raises(StorageError):
+        load(path)
+
+
+def test_load_rejects_strict_category_without_a_budget(tmp_path: Path) -> None:
+    path = tmp_path / "budget.json"
+    path.write_text(
+        json.dumps(
+            {
+                "history": [],
+                "budgets": {},
+                "strict": ["Food"],
+            }
+        )
+    )
+
+    with pytest.raises(StorageError):
+        load(path)
+
+
+def test_load_rejects_unknown_strict_category_like_live_data(tmp_path: Path) -> None:
+    path = tmp_path / "budget.json"
+    path.write_text(
+        json.dumps(
+            {
+                "history": [],
+                "budgets": {"Shopping": 50},
+                "strict": ["Shopping"],
+            }
+        )
+    )
+
+    with pytest.raises(InvalidCategoryError):
+        load(path)
+
+
+@pytest.mark.parametrize("strict", [[], None])
+def test_load_treats_empty_or_null_strict_as_absent(
+    tmp_path: Path, strict: object
+) -> None:
+    path = tmp_path / "budget.json"
+    path.write_text(
+        json.dumps(
+            {
+                "history": [{"type": "income", "amount": 500}],
+                "budgets": {"Food": 100},
+                "strict": strict,
+            }
+        )
+    )
+
+    loaded = load(path)
+
+    assert loaded.strict_budgets == []
+    assert loaded.add_expense(200, "Food") is True

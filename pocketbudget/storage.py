@@ -18,6 +18,8 @@ def save(account: Account, path: str | Path = STORAGE_PATH) -> None:
     data: dict[str, object] = {"history": account.history}
     if account.budgets:
         data["budgets"] = account.budgets
+    if account.strict_budgets:
+        data["strict"] = account.strict_budgets
     path.write_text(json.dumps(data, indent=2))
 
 
@@ -42,6 +44,7 @@ def load(path: str | Path = STORAGE_PATH) -> Account:
         raise StorageError(f"Save file {path} does not contain a valid history.")
     account = _account_from_history(history)
     _apply_budgets(account, raw)
+    _apply_strict_budgets(account, raw)
     return account
 
 
@@ -73,6 +76,20 @@ def _apply_budgets(account: Account, raw: dict[str, object]) -> None:
         if isinstance(amount, bool) or not isinstance(amount, int):
             raise StorageError("Save file contains an invalid budget amount.")
         account.set_budget(category, amount)
+
+
+def _apply_strict_budgets(account: Account, raw: dict[str, object]) -> None:
+    strict = raw.get("strict")
+    if strict is None:
+        return
+    if not isinstance(strict, list):
+        raise StorageError("Save file contains an invalid strict entry.")
+    for category in strict:
+        if not isinstance(category, str):
+            raise StorageError("Save file contains an invalid strict category.")
+        if category not in account.budgets:
+            raise StorageError("Save file contains an unknown strict category.")
+        account.set_budget(category, account.budgets[category], strict=True)
 
 
 def _income_category(entry: dict[str, object]) -> str | None:
