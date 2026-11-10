@@ -24,6 +24,13 @@ Add income to your budget.
 Record expenses.
 View transaction history.
 
+To make a category budget strict, add the trailing `--strict` flag:
+
+    python -m pocketbudget set-budget Food 100 --strict
+
+An expense that would exceed a strict budget is rejected (exit status 1) and
+nothing is saved. Without the flag, the expense is recorded with a warning.
+
 ## Running the Tests
 
 If the project uses pytest, run:

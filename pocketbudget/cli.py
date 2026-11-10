@@ -87,12 +87,13 @@ def _show_history(args: list[str]) -> None:
 
 
 def _set_budget(args: list[str]) -> None:
-    if len(args) != 2:
-        _error("Usage: pocketbudget set-budget <category> <limit>")
+    strict = len(args) == 3 and args[2] == "--strict"
+    if not (len(args) == 2 or strict):
+        _error("Usage: pocketbudget set-budget <category> <limit> [--strict]")
     category = args[0]
     amount = _parse_amount(args[1])
     account = _load()
-    account.set_budget(category, amount)
+    account.set_budget(category, amount, strict=strict)
     _save(account)
     print(f"Budget of {format_amount(amount)} set for {category}.")
 

@@ -36,6 +36,10 @@ class Account:
     def budgets(self) -> dict[str, int]:
         return dict(self._budgets)
 
+    @property
+    def strict_budgets(self) -> list[str]:
+        return sorted(self._strict_budgets)
+
     def add_income(self, amount: int, category: str | None = None) -> None:
         if amount < 0:
             raise InvalidAmountError("Income amount cannot be negative.")
